@@ -1,0 +1,493 @@
+import base64
+import binascii
+import hashlib
+import hmac
+import json
+import logging
+import os
+import re
+import secrets
+import struct
+import threading
+import time
+from functools import wraps
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from flask import Flask, g, jsonify, request
+
+# --------------------------------------------------------------------------- config
+SERVER_KEY = bytes.fromhex(os.environ["API_SIGNING_KEY"]) if os.environ.get("API_SIGNING_KEY") \
+    else secrets.token_bytes(32)
+ACCESS_TTL = 300                 # 5 minutes
+REFRESH_TTL = 7 * 24 * 3600      # 7 days
+PROOF_SKEW = 60                  # seconds of clock skew allowed on device proofs
+STEPUP_TTL = 300                 # step-up validity
+PAYMENT_TTL = 120                # time the user has to approve a payment
+MAX_PAYMENT_MINOR = 5_000_000    # per-payment ceiling (minor units)
+ALLOW_DEMO_ATTESTATION = os.environ.get("ALLOW_DEMO_ATTESTATION") == "1"
+
+app = Flask(_name_)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+log = logging.getLogger("bankapi")
+LOCK = threading.RLock()
+
+# --------------------------------------------------------------------------- state
+USERS = {}          # user_id -> user
+USERS_BY_NAME = {}  # username -> user
+DEVICES = {}        # device_id -> device
+FAMILIES = {}       # token family -> {user, device, revoked, stepup_until}
+REFRESH = {}        # sha256(refresh_token) -> {family, used, exp}
+SEEN_JTI = {}       # "device:jti" -> expiry (proof replay protection)
+ACCOUNTS = {}       # account_id -> account
+BENEFICIARIES = {}  # beneficiary_id -> beneficiary
+PAYMENTS = {}       # payment_id -> payment
+IDEM = {}           # (user_id, idempotency_key) -> {hash, resp}
+TXNS = []           # transaction ledger
+AUDIT = []          # hash-chained audit log
+_RATE = {}          # rate limit buckets
+
+
+# --------------------------------------------------------------------------- helpers
+class ApiError(Exception):
+    def _init_(self, status, code):
+        self.status, self.code = status, code
+
+
+def b64u(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def b64u_dec(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def sha256(b: bytes) -> bytes:
+    return hashlib.sha256(b).digest()
+
+
+def rate_limit(key: str, limit: int, window: int):
+    now = time.time()
+    with LOCK:
+        q = _RATE.setdefault(key, [])
+        while q and q[0] <= now - window:
+            q.pop(0)
+        if len(q) >= limit:
+            raise ApiError(429, "rate_limited")
+        q.append(now)
+
+
+# ----- audit log (hash chain: tampering with any record breaks every later hash)
+def audit(event: str, **fields):
+    with LOCK:
+        prev = AUDIT[-1]["hash"] if AUDIT else "0" * 64
+        rec = {"ts": int(time.time()), "event": event, **fields, "prev": prev}
+        rec["hash"] = hashlib.sha256(json.dumps(rec, sort_keys=True).encode()).hexdigest()
+        AUDIT.append(rec)
+
+
+def verify_audit_chain() -> bool:
+    prev = "0" * 64
+    for rec in AUDIT:
+        body = {k: v for k, v in rec.items() if k != "hash"}
+        calc = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+        if rec["prev"] != prev or calc != rec["hash"]:
+            return False
+        prev = rec["hash"]
+    return True
+
+
+# ----- strict schema validation
+def s(rx=None, lo=1, hi=64):
+    return (str, lambda v: lo <= len(v) <= hi and (rx is None or re.fullmatch(rx, v) is not None))
+
+
+def n(lo, hi):
+    return (int, lambda v: lo <= v <= hi)
+
+
+def body(schema: dict) -> dict:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ApiError(400, "invalid_body")
+    if set(data) - set(schema):
+        raise ApiError(400, "unknown_fields")
+    out = {}
+    for key, (typ, check) in schema.items():
+        v = data.get(key)
+        if key not in data or not isinstance(v, typ) or (typ is int and isinstance(v, bool)):
+            raise ApiError(400, "invalid_field")
+        if not check(v):
+            raise ApiError(400, "invalid_field")
+        out[key] = v
+    return out
+
+
+# ----- passwords (scrypt = memory-hard) and TOTP (RFC 6238)
+def hash_password(pw: str) -> bytes:
+    salt = secrets.token_bytes(16)
+    return salt + hashlib.scrypt(pw.encode(), salt=salt, n=2 ** 14, r=8, p=1, dklen=32)
+
+
+def verify_password(pw: str, stored: bytes) -> bool:
+    salt, dk = stored[:16], stored[16:]
+    cand = hashlib.scrypt(pw.encode(), salt=salt, n=2 ** 14, r=8, p=1, dklen=32)
+    return hmac.compare_digest(cand, dk)
+
+
+DUMMY_PW = hash_password(secrets.token_hex(8))  # equalises timing for unknown users
+
+
+def totp(secret: bytes, t=None, step=30) -> str:
+    counter = int((t if t is not None else time.time()) // step)
+    h = hmac.new(secret, struct.pack(">Q", counter), hashlib.sha1).digest()
+    o = h[-1] & 0xF
+    return f"{(struct.unpack('>I', h[o:o + 4])[0] & 0x7FFFFFFF) % 10 ** 6:06d}"
+
+
+def verify_totp(user: dict, code: str) -> bool:
+    """+/-1 step drift; a code (or older) can never be accepted twice."""
+    now, matched = time.time(), None
+    for drift in (-1, 0, 1):
+        t = now + drift * 30
+        if hmac.compare_digest(totp(user["totp_secret"], t), code):
+            matched = int(t // 30)
+    if matched is None or matched <= user["last_totp_counter"]:
+        return False
+    user["last_totp_counter"] = matched
+    return True
+
+
+def check_credentials(username: str, password: str, otp: str):
+    """Returns the user or None. Never reveals which factor failed."""
+    with LOCK:
+        user = USERS_BY_NAME.get(username)
+        pw_ok = verify_password(password, user["pw"] if user else DUMMY_PW)
+        if not user:
+            return None
+        if user["locked_until"] > time.time():
+            audit("login_blocked_locked", user=user["id"])
+            return None
+        if pw_ok and verify_totp(user, otp):
+            user["fails"] = 0
+            return user
+        user["fails"] += 1
+        if user["fails"] >= 5:  # progressive lockout: 30s, 60s, 120s ... max 15 min
+            user["locked_until"] = time.time() + min(900, 30 * 2 ** (user["fails"] - 5))
+        audit("login_failed", user=user["id"], fails=user["fails"])
+        return None
+
+
+# ----- keys, tokens, device proofs
+def load_pubkey(pem: str):
+    try:
+        k = serialization.load_pem_public_key(pem.encode())
+    except Exception:
+        raise ApiError(400, "invalid_public_key")
+    if not isinstance(k, ec.EllipticCurvePublicKey) or k.curve.name != "secp256r1":
+        raise ApiError(400, "invalid_public_key")
+    return k
+
+
+def verify_attestation(attestation: str) -> bool:
+    """PRODUCTION: validate Play Integrity / App Attest and bind the attested key to
+    auth_public_key. Here only a demo value is accepted, and only if enabled."""
+    return ALLOW_DEMO_ATTESTATION and attestation == "demo-attestation"
+
+
+def sign_access(claims: dict) -> str:
+    payload = b64u(json.dumps(claims, separators=(",", ":")).encode())
+    return payload + "." + b64u(hmac.new(SERVER_KEY, payload.encode(), hashlib.sha256).digest())
+
+
+def verify_access(token: str) -> dict:
+    try:
+        if len(token) > 1024:
+            raise ValueError
+        payload, sig = token.split(".")
+        good = b64u(hmac.new(SERVER_KEY, payload.encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(sig, good):
+            raise ValueError
+        claims = json.loads(b64u_dec(payload))
+        if claims["exp"] < time.time():
+            raise ValueError
+        return claims
+    except Exception:
+        raise ApiError(401, "unauthorized")
+
+
+def verify_proof(device_id: str, pubkey, ath: str):
+    """Header X-Device-Proof = b64u(json{ts, jti, sig}); sig is ECDSA-SHA256 (DER) over
+    METHOD|PATH|ts|jti|ath where ath = b64u(sha256(token)) or '' when no token is bound.
+    Binds the proof to this method, path and token and makes it single-use."""
+    raw = request.headers.get("X-Device-Proof", "")
+    try:
+        if not raw or len(raw) > 1024:
+            raise ValueError
+        p = json.loads(b64u_dec(raw))
+        ts, jti, sig = p["ts"], p["jti"], b64u_dec(p["sig"])
+        if not isinstance(ts, int) or not isinstance(jti, str) or not 8 <= len(jti) <= 64:
+            raise ValueError
+        if abs(time.time() - ts) > PROOF_SKEW:
+            raise ValueError
+        msg = "|".join([request.method, request.path, str(ts), jti, ath]).encode()
+        pubkey.verify(sig, msg, ec.ECDSA(hashes.SHA256()))
+    except Exception:
+        raise ApiError(401, "invalid_proof")
+    now = time.time()
+    with LOCK:
+        for k in [k for k, exp in SEEN_JTI.items() if exp < now]:
+            del SEEN_JTI[k]
+        if f"{device_id}:{jti}" in SEEN_JTI:
+            audit("proof_replay", device=device_id)
+            raise ApiError(401, "invalid_proof")
+        SEEN_JTI[f"{device_id}:{jti}"] = now + 2 * PROOF_SKEW
+
+
+def issue_tokens(user_id: str, device_id: str, family: str = None) -> dict:
+    now = int(time.time())
+    with LOCK:
+        if family is None:
+            family = secrets.token_hex(16)
+            FAMILIES[family] = {"user": user_id, "device": device_id,
+                                "revoked": False, "stepup_until": 0}
+        refresh = secrets.token_urlsafe(32)
+        REFRESH[b64u(sha256(refresh.encode()))] = {"family": family, "used": False,
+                                                    "exp": now + REFRESH_TTL}
+    access = sign_access({"sub": user_id, "dev": device_id, "fam": family,
+                          "jti": secrets.token_hex(8), "iat": now, "exp": now + ACCESS_TTL})
+    return {"access_token": access, "refresh_token": refresh,
+            "token_type": "DeviceBound", "expires_in": ACCESS_TTL}
+
+
+def revoke_family(family: str):
+    with LOCK:
+        if family in FAMILIES:
+            FAMILIES[family]["revoked"] = True
+
+
+# ----- auth decorator
+def require_auth(f):
+    @wraps(f)
+    def wrapper(*a, **kw):
+        h = request.headers.get("Authorization", "")
+        if not h.startswith("DeviceBound "):
+            raise ApiError(401, "unauthorized")
+        token = h[len("DeviceBound "):]
+        claims = verify_access(token)
+        fam = FAMILIES.get(claims["fam"])
+        dev = DEVICES.get(claims["dev"])
+        if not fam or fam["revoked"] or not dev or dev["revoked"]:
+            raise ApiError(401, "unauthorized")
+        verify_proof(dev["id"], dev["auth_key"], b64u(sha256(token.encode())))
+        g.user_id, g.device, g.family = claims["sub"], dev, claims["fam"]
+        rate_limit(f"user:{g.user_id}", 120, 60)
+        return f(*a, **kw)
+    return wrapper
+
+
+def owned(store: dict, obj_id: str):
+    """Object-level authorisation. 404 (not 403) so IDs can't be probed."""
+    obj = store.get(obj_id)
+    owner = obj and (obj.get("owner") or obj.get("user"))
+    if not obj or owner != g.user_id:
+        raise ApiError(404, "not_found")
+    return obj
+
+
+# --------------------------------------------------------------------------- hardening
+@app.after_request
+def harden(resp):
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    resp.headers["Content-Security-Policy"] = "default-src 'none'"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    return resp
+
+
+@app.errorhandler(ApiError)
+def on_api_error(e):
+    return jsonify({"error": e.code}), e.status
+
+
+@app.errorhandler(404)
+def on_404(_):
+    return jsonify({"error": "not_found"}), 404
+
+
+@app.errorhandler(405)
+def on_405(_):
+    return jsonify({"error": "method_not_allowed"}), 405
+
+
+@app.errorhandler(413)
+def on_413(_):
+    return jsonify({"error": "payload_too_large"}), 413
+
+
+@app.errorhandler(Exception)
+def on_error(e):
+    log.exception("unhandled")
+    return jsonify({"error": "internal_error"}), 500  # never leak internals
+
+
+# --------------------------------------------------------------------------- endpoints
+@app.post("/v1/devices")
+def enroll_device():
+    """Register the device's keys: one for request proofs, one for transaction signing."""
+    rate_limit(f"ip:{request.remote_addr}:auth", 20, 60)
+    d = body({"username": s(r"[a-z0-9_.-]+", 3, 32), "password": s(None, 1, 128),
+              "otp": s(r"\d{6}", 6, 6), "auth_public_key": s(None, 50, 400),
+              "tx_public_key": s(None, 50, 400), "attestation": s(None, 1, 4096)})
+    auth_key, tx_key = load_pubkey(d["auth_public_key"]), load_pubkey(d["tx_public_key"])
+    user = check_credentials(d["username"], d["password"], d["otp"])
+    if not user or not verify_attestation(d["attestation"]):
+        raise ApiError(401, "invalid_credentials")
+    dev_id = "dev_" + secrets.token_hex(8)
+    with LOCK:
+        DEVICES[dev_id] = {"id": dev_id, "user": user["id"], "auth_key": auth_key,
+                           "tx_key": tx_key, "revoked": False}
+    audit("device_enrolled", user=user["id"], device=dev_id, ip=request.remote_addr)
+    return jsonify({"device_id": dev_id}), 201
+
+
+@app.delete("/v1/devices/<dev_id>")
+@require_auth
+def revoke_device(dev_id):
+    dev = owned(DEVICES, dev_id)
+    with LOCK:
+        dev["revoked"] = True
+        for fam in FAMILIES.values():
+            if fam["device"] == dev_id:
+                fam["revoked"] = True
+    audit("device_revoked", user=g.user_id, device=dev_id)
+    return "", 204
+
+
+@app.post("/v1/auth/token")
+def login():
+    rate_limit(f"ip:{request.remote_addr}:auth", 20, 60)
+    d = body({"username": s(r"[a-z0-9_.-]+", 3, 32), "password": s(None, 1, 128),
+              "otp": s(r"\d{6}", 6, 6), "device_id": s(r"dev_[0-9a-f]{16}", 20, 20)})
+    rate_limit(f"login:{d['username']}", 10, 60)
+    dev = DEVICES.get(d["device_id"])
+    if not dev or dev["revoked"]:
+        raise ApiError(401, "invalid_credentials")
+    verify_proof(dev["id"], dev["auth_key"], "")
+    user = check_credentials(d["username"], d["password"], d["otp"])
+    if not user or user["id"] != dev["user"]:
+        raise ApiError(401, "invalid_credentials")
+    audit("login_ok", user=user["id"], device=dev["id"], ip=request.remote_addr)
+    return jsonify(issue_tokens(user["id"], dev["id"]))
+
+
+@app.post("/v1/auth/refresh")
+def refresh():
+    """Rotating refresh tokens. The proof is bound to the refresh token itself."""
+    rate_limit(f"ip:{request.remote_addr}:auth", 20, 60)
+    d = body({"refresh_token": s(r"[A-Za-z0-9_-]+", 20, 100)})
+    rec = REFRESH.get(b64u(sha256(d["refresh_token"].encode())))
+    if not rec:
+        raise ApiError(401, "invalid_token")
+    fam = FAMILIES.get(rec["family"])
+    dev = fam and DEVICES.get(fam["device"])
+    if not dev or dev["revoked"]:
+        raise ApiError(401, "invalid_token")
+    # Prove device possession first, so outsiders can't trigger revocations.
+    verify_proof(dev["id"], dev["auth_key"], b64u(sha256(d["refresh_token"].encode())))
+    with LOCK:
+        if rec["used"]:  # an old refresh token came back: assume theft, kill the family
+            revoke_family(rec["family"])
+            audit("refresh_reuse_detected", user=fam["user"], family=rec["family"])
+            raise ApiError(401, "invalid_token")
+        if fam["revoked"] or rec["exp"] < time.time():
+            raise ApiError(401, "invalid_token")
+        rec["used"] = True
+        return jsonify(issue_tokens(fam["user"], dev["id"], family=rec["family"]))
+
+
+@app.post("/v1/auth/logout")
+@require_auth
+def logout():
+    revoke_family(g.family)
+    audit("logout", user=g.user_id)
+    return "", 204
+
+
+@app.post("/v1/auth/step-up")
+@require_auth
+def step_up():
+    d = body({"otp": s(r"\d{6}", 6, 6)})
+    with LOCK:
+        if not verify_totp(USERS[g.user_id], d["otp"]):
+            audit("stepup_failed", user=g.user_id)
+            raise ApiError(401, "invalid_credentials")
+        FAMILIES[g.family]["stepup_until"] = time.time() + STEPUP_TTL
+    audit("stepup_ok", user=g.user_id)
+    return jsonify({"step_up_valid_for": STEPUP_TTL})
+
+
+@app.get("/v1/accounts")
+@require_auth
+def list_accounts():
+    return jsonify([{"id": a["id"], "currency": a["currency"],
+                     "balance_minor": a["balance_minor"], "number": "**" + a["number"][-4:]}
+                    for a in ACCOUNTS.values() if a["owner"] == g.user_id])
+
+
+@app.get("/v1/accounts/<acc_id>/transactions")
+@require_auth
+def list_transactions(acc_id):
+    owned(ACCOUNTS, acc_id)
+    if set(request.args) - {"limit", "before_seq"}:
+        raise ApiError(400, "unknown_params")
+    lim, before = request.args.get("limit", "20"), request.args.get("before_seq", "")
+    if not lim.isdigit() or not 1 <= int(lim) <= 50 or (before and not before.isdigit()):
+        raise ApiError(400, "invalid_params")
+    rows = [t for t in reversed(TXNS) if t["account_id"] == acc_id
+            and (not before or t["seq"] < int(before))]
+    return jsonify(rows[:int(lim)])
+
+
+@app.post("/v1/beneficiaries")
+@require_auth
+def add_beneficiary():
+    if time.time() > FAMILIES[g.family]["stepup_until"]:
+        raise ApiError(403, "step_up_required")  # fresh second factor before a new payee
+    d = body({"name": s(r"[A-Za-z0-9 .'-]+", 1, 60), "account_number": s(r"\d{8,16}", 8, 16),
+              "bank_code": s(r"[A-Z0-9]{4,11}", 4, 11)})
+    ben_id = "ben_" + secrets.token_hex(8)
+    with LOCK:
+        BENEFICIARIES[ben_id] = {"id": ben_id, "owner": g.user_id, **d}
+    audit("beneficiary_added", user=g.user_id, beneficiary=ben_id)
+    return jsonify({"id": ben_id, **d}), 201
+
+
+@app.get("/v1/beneficiaries")
+@require_auth
+def list_beneficiaries():
+    return jsonify([b for b in BENEFICIARIES.values() if b["owner"] == g.user_id])
+
+
+@app.post("/v1/payments")
+@require_auth
+def create_payment():
+    """Step 1: server builds the canonical payload the device must sign. The app must
+    show the user these exact values (what you see is what you sign)."""
+    d = body({"from_account_id": s(r"acc_[0-9a-f]{16}", 20, 20),
+              "beneficiary_id": s(r"ben_[0-9a-f]{16}", 20, 20),
+              "amount_minor": n(1, MAX_PAYMENT_MINOR),
+              "currency": s(r"[A-Z]{3}", 3, 3),
+              "reference": s(r"[A-Za-z0-9 .,_-]*", 0, 35)})
+    key = request.headers.get("Idempotency-Key", "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", key):
+        raise ApiError(400, "invalid_idempotency_key")
+    req_hash = hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()
+    with LOCK:
+        prior = IDEM.get((g.user_id, key))
+        if prior:
+            if prior["hash"] != req_hash:
+                raise ApiError(422, "idempotency_key_reuse")
+            return jsonif
