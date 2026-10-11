@@ -18,7 +18,7 @@ from flask import Flask, g, jsonify, request
 
 API_SIGNING_KEY = os.environ.get("API_SIGNING_KEY")
 if not API_SIGNING_KEY:
-    raise RuntimeError("API_SIGNING_KEY must be set before starting the API")
+    raise RuntimeError("API_SIGNING_KEY must be set before starting the API - run: export API_SIGNING_KEY=$(openssl rand -hex 32)")
 if len(bytes.fromhex(API_SIGNING_KEY)) != 32:
     raise RuntimeError("API_SIGNING_KEY must decode to exactly 32 bytes")
 
@@ -217,7 +217,9 @@ def verify_proof(device_id: str, key, auth_token_hash: str):
         envelope = json.loads(b64u_dec(raw))
         if not isinstance(envelope.get("method"), str) or not isinstance(envelope.get("path"), str):
             raise ValueError
-        if not isinstance(envelope.get("ts"), int) or not isinstance(envelope.get("jti"), str):
+        if type(envelope.get("ts")) is not int or not isinstance(envelope.get("jti"), str):
+            raise ValueError
+        if envelope["method"] != request.method or envelope["path"] != request.path:
             raise ValueError
         if abs(time.time() - envelope["ts"]) > PROOF_SKEW:
             raise ValueError

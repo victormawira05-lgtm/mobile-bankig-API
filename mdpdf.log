@@ -1,0 +1,111 @@
+    INFO: 2026-10-09 19:34:59,415:               log.py:   20: Logging to /workspaces/mobile-bankig-API/mdpdf.log
+   DEBUG: 2026-10-09 19:34:59,415:               cli.py:  103: proposal.md
+    INFO: 2026-10-09 19:34:59,416:         converter.py:   14: proposal.md
+   DEBUG: 2026-10-09 19:34:59,421:      pdf_renderer.py:  470: printSegment: JengaSec APP02 - Mobile Banking API - Cipher Squad
+   DEBUG: 2026-10-09 19:34:59,424:      pdf_renderer.py:  470: printSegment: Team:
+   DEBUG: 2026-10-09 19:34:59,427:      pdf_renderer.py:  470: printSegment:  Cipher Squad / Mawira
+   DEBUG: 2026-10-09 19:34:59,430:      pdf_renderer.py:  470: printSegment:  
+   DEBUG: 2026-10-09 19:34:59,431:      pdf_renderer.py:  470: printSegment: Repo:
+   DEBUG: 2026-10-09 19:34:59,432:      pdf_renderer.py:  470: printSegment:  https://github.com/victormawira05-lgtm/mobile-bankig-API
+   DEBUG: 2026-10-09 19:34:59,433:      pdf_renderer.py:  470: printSegment:  
+   DEBUG: 2026-10-09 19:34:59,434:      pdf_renderer.py:  470: printSegment: Commit:
+   DEBUG: 2026-10-09 19:34:59,435:      pdf_renderer.py:  470: printSegment: 
+   DEBUG: 2026-10-09 19:34:59,435:      pdf_renderer.py:  470: printSegment: 48fd8a0
+   DEBUG: 2026-10-09 19:34:59,436:      pdf_renderer.py:  470: printSegment:  
+   DEBUG: 2026-10-09 19:34:59,437:      pdf_renderer.py:  470: printSegment: Date:
+   DEBUG: 2026-10-09 19:34:59,438:      pdf_renderer.py:  470: printSegment:  July 2026
+   DEBUG: 2026-10-09 19:34:59,439:      pdf_renderer.py:  470: printSegment: 1. Solution Overview
+   DEBUG: 2026-10-09 19:34:59,440:      pdf_renderer.py:  470: printSegment: Secure Mobile Banking API implementing:
+   DEBUG: 2026-10-09 19:34:59,441:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,442:      pdf_renderer.py:  470: printSegment: Password Storage: hashlib.scrypt n=2
+   DEBUG: 2026-10-09 19:34:59,444:      pdf_renderer.py:  470: printSegment: **
+   DEBUG: 2026-10-09 19:34:59,445:      pdf_renderer.py:  470: printSegment: 14, r=8, p=1, dklen=32 + 16-byte salt
+   DEBUG: 2026-10-09 19:34:59,446:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,447:      pdf_renderer.py:  470: printSegment: Verification: hmac.compare
+   DEBUG: 2026-10-09 19:34:59,448:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,449:      pdf_renderer.py:  470: printSegment: digest (constant-time)
+   DEBUG: 2026-10-09 19:34:59,450:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,451:      pdf_renderer.py:  470: printSegment: Device Attestation: ECDSA with API
+   DEBUG: 2026-10-09 19:34:59,452:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,452:      pdf_renderer.py:  470: printSegment: SIGNING
+   DEBUG: 2026-10-09 19:34:59,453:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,454:      pdf_renderer.py:  470: printSegment: KEY
+   DEBUG: 2026-10-09 19:34:59,455:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,456:      pdf_renderer.py:  470: printSegment: Step-Up Auth: TOTP for /payments
+   DEBUG: 2026-10-09 19:34:59,457:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,458:      pdf_renderer.py:  470: printSegment: Token Security: Refresh token rotation with reuse detection
+   DEBUG: 2026-10-09 19:34:59,459:      pdf_renderer.py:  470: printSegment: 2. Proof - Tests Passing
+   DEBUG: 2026-10-09 19:34:59,461:      pdf_renderer.py:  470: printSegment: pytest -v = 3 passed
+   DEBUG: 2026-10-09 19:34:59,461:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,462:      pdf_renderer.py:  470: printSegment: test
+   DEBUG: 2026-10-09 19:34:59,463:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,464:      pdf_renderer.py:  470: printSegment: health
+   DEBUG: 2026-10-09 19:34:59,465:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,466:      pdf_renderer.py:  470: printSegment: and
+   DEBUG: 2026-10-09 19:34:59,466:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,467:      pdf_renderer.py:  470: printSegment: account
+   DEBUG: 2026-10-09 19:34:59,468:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,469:      pdf_renderer.py:  470: printSegment: flow PASSED
+   DEBUG: 2026-10-09 19:34:59,470:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,471:      pdf_renderer.py:  470: printSegment: test
+   DEBUG: 2026-10-09 19:34:59,472:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,473:      pdf_renderer.py:  470: printSegment: payment
+   DEBUG: 2026-10-09 19:34:59,474:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,475:      pdf_renderer.py:  470: printSegment: requires
+   DEBUG: 2026-10-09 19:34:59,475:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,476:      pdf_renderer.py:  470: printSegment: stop
+   DEBUG: 2026-10-09 19:34:59,477:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,478:      pdf_renderer.py:  470: printSegment: up
+   DEBUG: 2026-10-09 19:34:59,479:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,480:      pdf_renderer.py:  470: printSegment: and
+   DEBUG: 2026-10-09 19:34:59,481:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,482:      pdf_renderer.py:  470: printSegment: pass... PASSED
+   DEBUG: 2026-10-09 19:34:59,482:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,483:      pdf_renderer.py:  470: printSegment: test
+   DEBUG: 2026-10-09 19:34:59,484:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,485:      pdf_renderer.py:  470: printSegment: refresh
+   DEBUG: 2026-10-09 19:34:59,486:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,487:      pdf_renderer.py:  470: printSegment: tokens
+   DEBUG: 2026-10-09 19:34:59,488:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,489:      pdf_renderer.py:  470: printSegment: rotate
+   DEBUG: 2026-10-09 19:34:59,490:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,491:      pdf_renderer.py:  470: printSegment: and
+   DEBUG: 2026-10-09 19:34:59,492:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,494:      pdf_renderer.py:  470: printSegment: reuse
+   DEBUG: 2026-10-09 19:34:59,495:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,496:      pdf_renderer.py:  470: printSegment: is
+   DEBUG: 2026-10-09 19:34:59,497:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,498:      pdf_renderer.py:  470: printSegment: detected PASSED
+   DEBUG: 2026-10-09 19:34:59,499:      pdf_renderer.py:  470: printSegment: 3. How to Run
+   DEBUG: 2026-10-09 19:34:59,500:      pdf_renderer.py:  470: printSegment: export API
+   DEBUG: 2026-10-09 19:34:59,501:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,502:      pdf_renderer.py:  470: printSegment: SIGNING
+   DEBUG: 2026-10-09 19:34:59,503:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,504:      pdf_renderer.py:  470: printSegment: KEY=0123456789abcdef... (64-char hex)
+   DEBUG: 2026-10-09 19:34:59,505:      pdf_renderer.py:  470: printSegment:  
+   DEBUG: 2026-10-09 19:34:59,506:      pdf_renderer.py:  470: printSegment: export ALLOW
+   DEBUG: 2026-10-09 19:34:59,507:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,508:      pdf_renderer.py:  470: printSegment: DEMO
+   DEBUG: 2026-10-09 19:34:59,509:      pdf_renderer.py:  470: printSegment: _
+   DEBUG: 2026-10-09 19:34:59,510:      pdf_renderer.py:  470: printSegment: ATTESTATION=1
+   DEBUG: 2026-10-09 19:34:59,511:      pdf_renderer.py:  470: printSegment:  
+   DEBUG: 2026-10-09 19:34:59,512:      pdf_renderer.py:  470: printSegment: pytest -v
+   DEBUG: 2026-10-09 19:34:59,513:      pdf_renderer.py:  470: printSegment:  
+   DEBUG: 2026-10-09 19:34:59,514:      pdf_renderer.py:  470: printSegment: python -m flask --app app run --host=0.0.0.0 --port=8000
+   DEBUG: 2026-10-09 19:34:59,515:      pdf_renderer.py:  470: printSegment: 4. Team Expertise
+   DEBUG: 2026-10-09 19:34:59,535:      pdf_renderer.py:  470: printSegment: Python, Node.js, Bash, Express.js, Java Spring Boot. Azure PaaS (Container Apps, AKS, APIM, ADX/Kusto, App
+   DEBUG: 2026-10-09 19:34:59,541:      pdf_renderer.py:  470: printSegment: Insights, ADLS Gen2, Key Vault, Entra ID). Observability pipelines with OpenTelemetry. Security: TLS,
+   DEBUG: 2026-10-09 19:34:59,542:      pdf_renderer.py:  470: printSegment: OAuth2/JWT, RBAC, PII detection, audit logging.
+   DEBUG: 2026-10-09 19:34:59,543:      pdf_renderer.py:  470: printSegment: 5. Screenshots Attached
+   DEBUG: 2026-10-09 19:34:59,544:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,546:      pdf_renderer.py:  470: printSegment: 3 passed terminal
+   DEBUG: 2026-10-09 19:34:59,547:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,548:      pdf_renderer.py:  470: printSegment: git push 48fd8a0
+   DEBUG: 2026-10-09 19:34:59,549:      pdf_renderer.py:  470: printSegment: l
+   DEBUG: 2026-10-09 19:34:59,550:      pdf_renderer.py:  470: printSegment: app.py line 142-153
+   DEBUG: 2026-10-09 19:34:59,551:      pdf_renderer.py:   53: 0, [1, 'JengaSec APP02 - Mobile Banking API - Cipher Squad', 1, 68.0]
+   DEBUG: 2026-10-09 19:34:59,551:      pdf_renderer.py:   53: 1, [2, '1. Solution Overview', 1, 136.0]
+   DEBUG: 2026-10-09 19:34:59,551:      pdf_renderer.py:   53: 2, [2, '2. Proof - Tests Passing', 1, 259.6]
+   DEBUG: 2026-10-09 19:34:59,551:      pdf_renderer.py:   53: 3, [2, '3. How to Run', 1, 359.20000000000005]
+   DEBUG: 2026-10-09 19:34:59,551:      pdf_renderer.py:   53: 4, [2, '4. Team Expertise', 1, 422.80000000000007]
+   DEBUG: 2026-10-09 19:34:59,551:      pdf_renderer.py:   53: 5, [2, '5. Screenshots Attached', 1, 498.4000000000001]

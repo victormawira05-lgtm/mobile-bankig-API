@@ -249,3 +249,46 @@ def test_refresh_tokens_rotate_and_reuse_is_detected(client, monkeypatch):
     )
     assert current.status_code == 401
     assert current.get_json()["error"] == "unauthorized"
+
+
+def test_device_proof_is_bound_to_the_request_route(client, monkeypatch):
+    app_module = importlib.import_module("app")
+    clock = 1700000000
+    monkeypatch.setattr(app_module.time, "time", lambda: clock)
+    device_id, auth_key, _ = _device_headers(client, "alice", "StrongPass!123", timestamp=clock)
+    clock += 60
+    token = client.post(
+        "/v1/auth/token",
+        json={
+            "username": "alice",
+            "password": "StrongPass!123",
+            "otp": _otp(app_module, "alice", clock),
+            "device_id": device_id,
+            "device_proof": "",
+        },
+    ).get_json()
+
+    access_token = token["access_token"]
+    accounts = client.get(
+        "/v1/accounts",
+        headers=_proof_headers("GET", "/v1/accounts", access_token, auth_key, "proof-route-check"),
+    )
+    assert accounts.status_code == 200
+    account_id = accounts.get_json()[0]["id"]
+
+    token_hash = base64.urlsafe_b64encode(hashlib.sha256(access_token.encode()).digest()).rstrip(b"=").decode()
+    proof = {
+        "method": "GET",
+        "path": "/v1/accounts",
+        "ts": clock,
+        "jti": "route-mismatch",
+        "sig": _sign("|".join(["GET", "/v1/accounts", str(clock), "route-mismatch", token_hash]), auth_key),
+    }
+    headers = {
+        "Authorization": f"DeviceBound {access_token}",
+        "X-Device-Proof": base64.urlsafe_b64encode(json.dumps(proof, separators=(",", ":")).encode()).rstrip(b"=").decode(),
+    }
+
+    mismatch = client.get(f"/v1/accounts/{account_id}/transactions", headers=headers)
+    assert mismatch.status_code == 401
+    assert mismatch.get_json()["error"] == "invalid_proof"
