@@ -1,0 +1,525 @@
+import { useEffect, useMemo, useState } from 'react'
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const STORAGE_KEY = 'mobile-banking-demo'
+
+function base64UrlEncode(value) {
+  const bytes = value instanceof Uint8Array ? value : new TextEncoder().encode(String(value))
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function arrayBufferToPem(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  const base64 = btoa(binary)
+  const lines = base64.match(/.{1,64}/g) || []
+  return `-----BEGIN PUBLIC KEY-----\n${lines.join('\n')}\n-----END PUBLIC KEY-----\n`
+}
+
+async function generateKeyPair() {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  )
+
+  const rawPublicKey = await crypto.subtle.exportKey('spki', keyPair.publicKey)
+  return {
+    authPrivateKey: keyPair.privateKey,
+    authPublicKey: arrayBufferToPem(rawPublicKey),
+  }
+}
+
+async function digestSha256(value) {
+  const bytes = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return base64UrlEncode(new Uint8Array(digest))
+}
+
+async function createProofHeaders(method, path, token, privateKey, jti = `jti-${Date.now()}`) {
+  const ts = Math.floor(Date.now() / 1000)
+  const tokenHash = await digestSha256(token)
+  const signatureMessage = [method, path, String(ts), jti, tokenHash].join('|')
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    privateKey,
+    new TextEncoder().encode(signatureMessage),
+  )
+
+  const proof = {
+    method,
+    path,
+    ts,
+    jti,
+    sig: base64UrlEncode(new Uint8Array(signature)),
+  }
+
+  return {
+    Authorization: `DeviceBound ${token}`,
+    'X-Device-Proof': base64UrlEncode(JSON.stringify(proof)),
+  }
+}
+
+function makeIdempotencyKey(label) {
+  const random = Math.random().toString(36).slice(2, 12)
+  return `${label}-${Date.now()}-${random}`
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  })
+
+  const contentType = response.headers.get('content-type') || ''
+  const payload = contentType.includes('application/json') ? await response.json() : await response.text()
+
+  if (!response.ok) {
+    const message = payload?.error || 'Request failed'
+    throw new Error(message)
+  }
+
+  return payload
+}
+
+async function requestAuthenticated(method, path, token, privateKey, payload = null) {
+  const headers = await createProofHeaders(method, path, token, privateKey)
+
+  if (payload !== null) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  if (method !== 'GET') {
+    headers['Idempotency-Key'] = makeIdempotencyKey(path.replace(/\//g, '-'))
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    ...(payload !== null ? { body: JSON.stringify(payload) } : {}),
+  })
+
+  const contentType = response.headers.get('content-type') || ''
+  const data = contentType.includes('application/json') ? await response.json() : await response.text()
+
+  if (!response.ok) {
+    const message = data?.error || 'Request failed'
+    throw new Error(message)
+  }
+
+  return data
+}
+
+function getStoredSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveSession(session) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+}
+
+function App() {
+  const [username, setUsername] = useState('alice')
+  const [password, setPassword] = useState('StrongPass!123')
+  const [otp, setOtp] = useState('123456')
+  const [deviceId, setDeviceId] = useState('')
+  const [deviceKeys, setDeviceKeys] = useState(null)
+  const [session, setSession] = useState(() => getStoredSession())
+  const [accounts, setAccounts] = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [beneficiaries, setBeneficiaries] = useState([])
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [stepUpOtp, setStepUpOtp] = useState('')
+  const [paymentForm, setPaymentForm] = useState({
+    from_account_id: '',
+    beneficiary_id: '',
+    amount_minor: '1000',
+    currency: 'USD',
+    reference: 'rent',
+  })
+  const [beneficiaryForm, setBeneficiaryForm] = useState({
+    name: 'Jane Doe',
+    account_number: '12345678',
+    bank_code: 'BANK01',
+  })
+
+  useEffect(() => {
+    if (session?.deviceId) {
+      setDeviceId(session.deviceId)
+    }
+    if (session?.authPrivateKey) {
+      setDeviceKeys({
+        authPrivateKey: session.authPrivateKey,
+        authPublicKey: session.authPublicKey,
+      })
+    }
+  }, [session])
+
+  const accountOptions = useMemo(
+    () => accounts.map((account) => ({ value: account.id, label: `${account.number} • ${account.currency} ${account.balance_minor}` })),
+    [accounts],
+  )
+
+  const loadAccounts = async (token, privateKey) => {
+    const data = await requestAuthenticated('GET', '/v1/accounts', token, privateKey)
+    setAccounts(data)
+    if (data[0]) {
+      setPaymentForm((prev) => ({ ...prev, from_account_id: data[0].id }))
+    }
+    return data
+  }
+
+  const loadBeneficiaries = async (token, privateKey) => {
+    const data = await requestAuthenticated('GET', '/v1/beneficiaries', token, privateKey)
+    setBeneficiaries(data)
+    if (data[0]) {
+      setPaymentForm((prev) => ({ ...prev, beneficiary_id: data[0].id }))
+    }
+    return data
+  }
+
+  const loadTransactions = async (accountId, token, privateKey) => {
+    const data = await requestAuthenticated('GET', `/v1/accounts/${accountId}/transactions`, token, privateKey)
+    setTransactions(data)
+    return data
+  }
+
+  const handleGenerateDevice = async () => {
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const generated = await generateKeyPair()
+      setDeviceKeys(generated)
+
+      const response = await api('/v1/devices', {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': makeIdempotencyKey('device-enroll'),
+        },
+        body: JSON.stringify({
+          username,
+          password,
+          otp,
+          auth_public_key: generated.authPublicKey,
+          tx_public_key: generated.authPublicKey,
+          attestation: 'demo-attestation',
+        }),
+      })
+
+      setDeviceId(response.device_id)
+      setMessage(`Device registered successfully: ${response.device_id}`)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogin = async () => {
+    setError('')
+    setIsLoading(true)
+
+    try {
+      if (!deviceId || !deviceKeys) {
+        throw new Error('Register a device before logging in')
+      }
+
+      const result = await api('/v1/auth/token', {
+        method: 'POST',
+        body: JSON.stringify({
+          username,
+          password,
+          otp,
+          device_id: deviceId,
+          device_proof: '',
+        }),
+      })
+
+      const nextSession = {
+        ...result,
+        deviceId,
+        authPrivateKey: deviceKeys.authPrivateKey,
+        authPublicKey: deviceKeys.authPublicKey,
+      }
+      saveSession(nextSession)
+      setSession(nextSession)
+      setMessage('Logged in successfully')
+
+      await loadAccounts(result.access_token, deviceKeys.authPrivateKey)
+      await loadBeneficiaries(result.access_token, deviceKeys.authPrivateKey)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleStepUp = async () => {
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const token = session.access_token
+      const result = await requestAuthenticated('POST', '/v1/auth/step-up', token, deviceKeys.authPrivateKey, {
+        otp: stepUpOtp,
+      })
+      setMessage(`Step-up succeeded: ${result.step_up_valid_for}s`)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateBeneficiary = async () => {
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const token = session.access_token
+      const result = await requestAuthenticated('POST', '/v1/beneficiaries', token, deviceKeys.authPrivateKey, beneficiaryForm)
+      setMessage(`Beneficiary created: ${result.id}`)
+      await loadBeneficiaries(token, deviceKeys.authPrivateKey)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handlePayment = async () => {
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const token = session.access_token
+      const result = await requestAuthenticated('POST', '/v1/payments', token, deviceKeys.authPrivateKey, {
+        ...paymentForm,
+        amount_minor: Number(paymentForm.amount_minor),
+      })
+      setMessage(`Payment submitted: ${result.payment_id}`)
+      if (paymentForm.from_account_id) {
+        await loadAccounts(token, deviceKeys.authPrivateKey)
+        await loadTransactions(paymentForm.from_account_id, token, deviceKeys.authPrivateKey)
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem(STORAGE_KEY)
+    setSession(null)
+    setAccounts([])
+    setTransactions([])
+    setBeneficiaries([])
+    setDeviceId('')
+    setDeviceKeys(null)
+    setMessage('Logged out')
+  }
+
+  return (
+    <div className="page-shell">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Demo banking UI</p>
+          <h1>Mobile Banking</h1>
+        </div>
+        {session && (
+          <button className="danger" onClick={handleLogout}>
+            Logout
+          </button>
+        )}
+      </header>
+
+      <div className="card-grid">
+        <section className="card">
+          <h2>1. Device registration</h2>
+          <label>
+            Username
+            <input value={username} onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          <label>
+            Password
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          <label>
+            OTP
+            <input value={otp} onChange={(e) => setOtp(e.target.value)} />
+          </label>
+          <div className="row">
+            <strong>Device ID:</strong>
+            <span>{deviceId || 'Not registered yet'}</span>
+          </div>
+          <button onClick={handleGenerateDevice} disabled={isLoading}>
+            Register Device
+          </button>
+        </section>
+
+        <section className="card">
+          <h2>2. Login</h2>
+          <button onClick={handleLogin} disabled={isLoading || !deviceId || !deviceKeys}>
+            Sign in
+          </button>
+          {session && (
+            <div className="token-box">
+              <small>Access Token</small>
+              <code>{session.access_token.slice(0, 80)}...</code>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {session && (
+        <>
+          <div className="card-grid">
+            <section className="card">
+              <h2>3. Step-up</h2>
+              <input value={stepUpOtp} onChange={(e) => setStepUpOtp(e.target.value)} placeholder="6-digit OTP" />
+              <button onClick={handleStepUp} disabled={isLoading}>
+                Verify Step-up
+              </button>
+            </section>
+
+            <section className="card">
+              <h2>4. Accounts</h2>
+              {accounts.length === 0 ? (
+                <p>No accounts loaded</p>
+              ) : (
+                <div className="stack">
+                  {accounts.map((account) => (
+                    <button
+                      key={account.id}
+                      className="account-row"
+                      onClick={() => {
+                        setPaymentForm((prev) => ({ ...prev, from_account_id: account.id }))
+                        loadTransactions(account.id, session.access_token, deviceKeys.authPrivateKey)
+                      }}
+                    >
+                      <strong>{account.number}</strong>
+                      <span>{account.currency} {account.balance_minor}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="card-grid">
+            <section className="card">
+              <h2>5. Add beneficiary</h2>
+              <label>
+                Name
+                <input value={beneficiaryForm.name} onChange={(e) => setBeneficiaryForm((prev) => ({ ...prev, name: e.target.value }))} />
+              </label>
+              <label>
+                Account number
+                <input value={beneficiaryForm.account_number} onChange={(e) => setBeneficiaryForm((prev) => ({ ...prev, account_number: e.target.value }))} />
+              </label>
+              <label>
+                Bank code
+                <input value={beneficiaryForm.bank_code} onChange={(e) => setBeneficiaryForm((prev) => ({ ...prev, bank_code: e.target.value }))} />
+              </label>
+              <button onClick={handleCreateBeneficiary} disabled={isLoading}>
+                Add Beneficiary
+              </button>
+            </section>
+
+            <section className="card">
+              <h2>6. Payment</h2>
+              <label>
+                From account
+                <select value={paymentForm.from_account_id} onChange={(e) => setPaymentForm((prev) => ({ ...prev, from_account_id: e.target.value }))}>
+                  <option value="">Select account</option>
+                  {accountOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Beneficiary
+                <select value={paymentForm.beneficiary_id} onChange={(e) => setPaymentForm((prev) => ({ ...prev, beneficiary_id: e.target.value }))}>
+                  <option value="">Select beneficiary</option>
+                  {beneficiaries.map((beneficiary) => (
+                    <option key={beneficiary.id} value={beneficiary.id}>
+                      {beneficiary.name} • {beneficiary.account_number}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Amount minor
+                <input value={paymentForm.amount_minor} onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount_minor: e.target.value }))} />
+              </label>
+              <label>
+                Currency
+                <input value={paymentForm.currency} onChange={(e) => setPaymentForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))} />
+              </label>
+              <label>
+                Reference
+                <input value={paymentForm.reference} onChange={(e) => setPaymentForm((prev) => ({ ...prev, reference: e.target.value }))} />
+              </label>
+              <button onClick={handlePayment} disabled={isLoading}>
+                Send Payment
+              </button>
+            </section>
+          </div>
+
+          <div className="card-grid">
+            <section className="card">
+              <h2>Beneficiaries</h2>
+              <ul className="list">
+                {beneficiaries.length === 0 ? <li>No beneficiaries yet</li> : beneficiaries.map((beneficiary) => (
+                  <li key={beneficiary.id}>
+                    {beneficiary.name} — {beneficiary.account_number} ({beneficiary.bank_code})
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="card">
+              <h2>Transactions</h2>
+              <ul className="list">
+                {transactions.length === 0 ? <li>No transactions yet</li> : transactions.map((txn) => (
+                  <li key={`${txn.account_id}-${txn.seq}`}>
+                    {txn.type} • {txn.amount_minor} • {txn.description}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        </>
+      )}
+
+      {(message || error) && (
+        <div className={message ? 'notice success' : 'notice error'}>
+          {message || error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default App
