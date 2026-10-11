@@ -28,7 +28,7 @@ PAYMENT_TTL = 120                # time the user has to approve a payment
 MAX_PAYMENT_MINOR = 5_000_000    # per-payment ceiling (minor units)
 ALLOW_DEMO_ATTESTATION = os.environ.get("ALLOW_DEMO_ATTESTATION") == "1"
 
-app = Flask(_name_)
+app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 log = logging.getLogger("bankapi")
 LOCK = threading.RLock()
@@ -51,7 +51,7 @@ _RATE = {}          # rate limit buckets
 
 # --------------------------------------------------------------------------- helpers
 class ApiError(Exception):
-    def _init_(self, status, code):
+    def __init__(self, status, code):
         self.status, self.code = status, code
 
 
@@ -490,4 +490,4 @@ def create_payment():
         if prior:
             if prior["hash"] != req_hash:
                 raise ApiError(422, "idempotency_key_reuse")
-            return jsonif
+            return jsonify(prior["resp"]), 200

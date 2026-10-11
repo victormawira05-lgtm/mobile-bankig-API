@@ -18,7 +18,7 @@ A compact Flask API that demonstrates mobile-banking flows with device-bound acc
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-export API_SIGNING_KEY=0123456789abcdef0123456789abcdef
+export API_SIGNING_KEY="$(openssl rand -hex 32)"
 flask --app app run --debug
 ```
 
