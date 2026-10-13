@@ -334,6 +334,11 @@ def check_credentials(username: str, password: str, otp: str):
 
 def create_app():
     app = Flask(__name__)
+    @app.route('/healthz')
+    def healthz():
+        return {"status": "ok"}, 200
+
+    
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
     @app.get("/health")
@@ -590,6 +595,11 @@ def seed_demo_user(username: str = "alice", password: str = "StrongPass!123"):
     with LOCK:
         TXNS.append({"seq": 1, "account_id": account_id, "amount_minor": 500000, "type": "credit", "description": "Opening balance", "ts": int(time.time())})
     return user
-
-
-app = create_app()
+# Gunicorn compatibility - make both names work
+try:
+    application = app
+except NameError:
+    try:
+        app = application
+    except NameError:
+        pass
