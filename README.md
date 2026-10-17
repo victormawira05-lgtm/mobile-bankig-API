@@ -1,35 +1,30 @@
 # Mobile Banking API
+### The Credit Infrastructure for Kenya's Mobile Economy
 
-A compact Flask API that demonstrates mobile-banking flows with device-bound access tokens, TOTP verification, step-up authorization, beneficiaries, payments, and transaction history.
+> One API to launch compliant micro-loans. Built in Thika, for Kenya.
 
-## Features
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
+[![M-Pesa](https://img.shields.io/badge/M--Pesa-43B02A?style=flat&logo=m-pesa&logoColor=white)](https://developer.safaricom.co.ke)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-- Device enrollment with ECDSA public keys
-- Device-bound access tokens and rotating refresh tokens
-- TOTP login and step-up authentication
-- Account and transaction listing
-- Beneficiary management after step-up
-- Idempotent payment requests
-- In-memory state for local development
+**Live Demo:** https://victormawira05-lgmt.github.io/mobile-banking-api/demo  
+**API Docs:** `https://api.mobilebanking.co.ke/docs` | **Kaggle Model:** https://www.kaggle.com/code/victormawira05-lgmt/mobile-banking-api-scoring
 
-## Quick start
+---
 
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-export API_SIGNING_KEY="$(openssl rand -hex 32)"
-flask --app app run --debug
-```
+### Try it Out
 
-The service exposes a health endpoint at `/health`.
-
-## Demo credentials
-
-The test seed creates a user named `alice` with password `StrongPass!123` and OTP `123456`.
-
-## Running tests
+**1. Affordability Check (The 500 KES Demo)**
 
 ```bash
-pytest -q
-```
+curl -X POST https://api.mobilebanking.co.ke/v1/loans/affordability-check \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 500,
+    "currency": "KES",
+    "purpose": "Working capital for Mobile Banking API operations - data and transport",
+    "gross_income": 24000,
+    "existing_debt": 4200,
+    "term_months": 1
+  }'
