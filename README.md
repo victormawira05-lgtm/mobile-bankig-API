@@ -18,7 +18,7 @@
 **1. Affordability Check (The 500 KES Demo)**
 
 ```bash
-curl -X POST https://api.mobilebanking.co.ke/v1/loans/affordability-check \
+curl -X POST https://supreme-space-happiness-jj65xgxxg5pqcj57j-8000.app.github.dev/v1/loans/affordability-check \
   -H "Content-Type: application/json" \
   -d '{
     "amount": 500,
