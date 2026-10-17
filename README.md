@@ -8,8 +8,8 @@
 [![M-Pesa](https://img.shields.io/badge/M--Pesa-43B02A?style=flat&logo=m-pesa&logoColor=white)](https://developer.safaricom.co.ke)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Live Demo:** https://victormawira05-lgmt.github.io/mobile-banking-api/demo  
-**API Docs:** `https://api.mobilebanking.co.ke/docs` | **Kaggle Model:** https://www.kaggle.com/code/victormawira05-lgmt/mobile-banking-api-scoring
+**Live Demo:** https://supreme-space-happiness-jj65xgxxg5pqcj57j-3000.app.github.dev/
+**API Docs:**https://supreme-space-happiness-jj65xgxxg5pqcj57j-8000.app.github.dev/docs#/default
 
 ---
 
