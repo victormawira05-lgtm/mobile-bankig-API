@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -57,7 +58,14 @@ def b64u(value: bytes) -> str:
 
 
 def b64u_dec(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * ((4 - len(value) % 4) % 4))
+    if not isinstance(value, str):
+        raise ValueError("invalid_base64")
+    if len(value) % 4 == 1:
+        raise ValueError("invalid_base64")
+    try:
+        return base64.urlsafe_b64decode(value + "=" * ((4 - len(value) % 4) % 4))
+    except (TypeError, ValueError, binascii.Error) as exc:
+        raise ValueError("invalid_base64") from exc
 
 
 def sha256(value: bytes) -> bytes:
@@ -144,6 +152,9 @@ def hash_password(password: str) -> bytes:
     return salt + hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
 
 
+DUMMY_PW = hash_password(secrets.token_hex(8))
+
+
 def verify_password(password: str, stored: bytes) -> bool:
     if not stored:
         return False
@@ -193,17 +204,27 @@ def sign_access(claims: dict) -> str:
 
 def verify_access(token: str) -> dict:
     try:
-        if len(token) > 1024:
+        if len(token) > 1024 or token.count(".") != 1:
             raise ValueError
         payload, signature = token.split(".")
+        if not payload or not signature:
+            raise ValueError
         expected = b64u(hmac.new(SERVER_KEY, payload.encode(), hashlib.sha256).digest())
         if not hmac.compare_digest(signature, expected):
             raise ValueError
         claims = json.loads(b64u_dec(payload))
-        if claims.get("iss") != "mobile-banking-api" or claims.get("exp") is None:
+        if not isinstance(claims, dict):
             raise ValueError
-        if claims["exp"] < time.time():
+        if claims.get("iss") != "mobile-banking-api":
             raise ValueError
+        exp = claims.get("exp")
+        if not isinstance(exp, int) or isinstance(exp, bool):
+            raise ValueError
+        if exp <= time.time():
+            raise ValueError
+        for key in ("sub", "dev", "fam", "jti", "iat"):
+            if key not in claims:
+                raise ValueError
         return claims
     except Exception as exc:
         raise ApiError(401, "unauthorized") from exc
@@ -211,6 +232,7 @@ def verify_access(token: str) -> dict:
 
 def verify_proof(device_id: str, key, auth_token_hash: str):
     raw = request.headers.get("X-Device-Proof", "")
+    envelope = None
     try:
         if not raw or len(raw) > 2048:
             raise ValueError
@@ -234,7 +256,7 @@ def verify_proof(device_id: str, key, auth_token_hash: str):
         if not isinstance(signature, str):
             raise ValueError
         key.verify(b64u_dec(signature), message, ec.ECDSA(hashes.SHA256()))
-    except (InvalidSignature, ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (InvalidSignature, ValueError, TypeError, KeyError, json.JSONDecodeError, binascii.Error):
         raise ApiError(401, "invalid_proof")
     now = time.time()
     with LOCK:
@@ -320,6 +342,7 @@ def check_credentials(username: str, password: str, otp: str):
     with LOCK:
         user = USERS_BY_NAME.get(username)
         if not user:
+            verify_password(password, DUMMY_PW)
             return None
         if user["locked_until"] > time.time():
             return None
@@ -595,11 +618,12 @@ def seed_demo_user(username: str = "alice", password: str = "StrongPass!123"):
     with LOCK:
         TXNS.append({"seq": 1, "account_id": account_id, "amount_minor": 500000, "type": "credit", "description": "Opening balance", "ts": int(time.time())})
     return user
-# Gunicorn compatibility - make both names work
-try:
-    application = app
-except NameError:
-    try:
-        app = application
-    except NameError:
-        pass
+# Gunicorn/Flask compatibility: expose an importable app object at module scope.
+app = create_app() 
+import os
+import uvicorn
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+application = app
