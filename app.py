@@ -619,11 +619,10 @@ def seed_demo_user(username: str = "alice", password: str = "StrongPass!123"):
         TXNS.append({"seq": 1, "account_id": account_id, "amount_minor": 500000, "type": "credit", "description": "Opening balance", "ts": int(time.time())})
     return user
 # Gunicorn/Flask compatibility: expose an importable app object at module scope.
-app = create_app() 
-import os
-import uvicorn
+app = create_app()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
-application = app
+    import os
+    port = int(os.getenv("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
+
