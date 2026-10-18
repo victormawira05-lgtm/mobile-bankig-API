@@ -356,14 +356,15 @@ def check_credentials(username: str, password: str, otp: str):
 
 
 def create_app():
+    app = Flask(__name__)
+
     @app.route('/')
-def index():
-    return {
-        "message": "Mobile Banking API is live",
-        "health": "/health",
-        "healthz": "/healthz",
-        "docs": "Use /api/* endpoints"
-    }, 200
+    def index():
+        return {"message": "Mobile Banking API is live", "health": "/health"}, 200
+
+    @app.route('/healthz')
+    def healthz():
+        return {"status": "ok"}, 200
 
     
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
