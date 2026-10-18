@@ -354,25 +354,34 @@ def check_credentials(username: str, password: str, otp: str):
             user["locked_until"] = time.time() + min(900, 30 * 2 ** (user["fails"] - 5))
         return None
 
-
 def create_app():
     app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
     @app.route('/')
     def index():
         return {"message": "Mobile Banking API is live", "health": "/health"}, 200
 
+    @app.route('/health')
+    def health():
+        return jsonify({"status": "ok"})
+
     @app.route('/healthz')
     def healthz():
         return {"status": "ok"}, 200
 
-    
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+    @app.before_request
+    def enforce_json_content_type():
+        if request.method in {"POST", "PUT", "PATCH"} and request.content_length:
+            if not request.is_json:
+                return jsonify({"error": "content_type_must_be_json"}), 415
 
-    @app.get("/health")
-    def health():
-        return jsonify({"status": "ok"})
+    return app
 
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
     @app.before_request
     def enforce_json_content_type():
         if request.method in {"POST", "PUT", "PATCH"} and request.content_length and request.mimetype != "application/json":
@@ -601,7 +610,7 @@ def create_app():
             IDEM[(g.user_id, request.headers["Idempotency-Key"], f"payment:{g.user_id}")] = {"hash": idem[0]["hash"], "response": response}
             return jsonify(response), 201
 
-    return app
+    
 
 
 def seed_demo_user(username: str = "alice", password: str = "StrongPass!123"):
