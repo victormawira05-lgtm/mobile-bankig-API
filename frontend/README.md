@@ -25,6 +25,8 @@ A small React app that connects to the Flask API in this repository.
 
 3. Open http://localhost:3000
 
+If port 3000 is already in use, Vite automatically starts on the next available port and prints the URL. To choose a port explicitly, set `PORT` when starting the frontend, for example `PORT=3001 npm run dev`.
+
 ## Notes
 
 - The frontend registers a demo ECDSA device and calls the backend’s `/v1/devices`, `/v1/auth/token`, `/v1/accounts`, `/v1/beneficiaries`, and `/v1/payments` endpoints.

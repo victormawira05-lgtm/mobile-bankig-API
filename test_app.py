@@ -292,3 +292,21 @@ def test_device_proof_is_bound_to_the_request_route(client, monkeypatch):
     mismatch = client.get(f"/v1/accounts/{account_id}/transactions", headers=headers)
     assert mismatch.status_code == 401
     assert mismatch.get_json()["error"] == "invalid_proof"
+
+
+def test_cors_preflight_allows_frontend_headers(client):
+    response = client.options(
+        "/v1/devices",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,authorization,x-device-proof,idempotency-key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "http://localhost:3000"
+    allowed_headers = response.headers["Access-Control-Allow-Headers"].lower()
+    assert "authorization" in allowed_headers
+    assert "x-device-proof" in allowed_headers
+    assert "idempotency-key" in allowed_headers

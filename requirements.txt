@@ -24,6 +24,7 @@ executing==2.2.1
 fastapi==0.146.0
 fastjsonschema==2.22.2
 Flask==3.1.0
+Flask-Cors==6.0.5
 fqdn==1.5.1
 gitdb==4.0.12
 GitPython==3.1.62
