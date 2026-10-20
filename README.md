@@ -1,30 +1,23 @@
-# Mobile Banking API
-### The Credit Infrastructure for Kenya's Mobile Economy
+# Mobile Banking - PayPal AI
 
-> One API to launch compliant micro-loans. Built in Thika, for Kenya.
+Kenya-focused mobile banking with PayPal + AI Coach.
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
-[![M-Pesa](https://img.shields.io/badge/M--Pesa-43B02A?style=flat&logo=m-pesa&logoColor=white)](https://developer.safaricom.co.ke)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Features
+- Pay with PayPal Sandbox API (create order + capture)
+- AI Financial Insights (spending analysis, savings tips)
+- AI Chat Coach
 
-**Live Demo:** https://supreme-space-happiness-jj65xgxxg5pqcj57j-3000.app.github.dev/
-**API Docs:**https://supreme-space-happiness-jj65xgxxg5pqcj57j-8000.app.github.dev/docs#/default
+## Run
+Backend: `python app.py` (runs on 0.0.0.0:8000)
+Frontend: `cd frontend && npm install && npm run dev`
 
----
+## API
+- POST /api/paypal/create-order {amount}
+- POST /api/paypal/capture/:id
+- POST /api/ai/insights {transactions}
+- POST /api/ai/chat {message}
 
-### Try it Out
+Works in mock mode without API keys for judges. Add PAYPAL_CLIENT_ID, PAYPAL_SECRET, OPENAI_API_KEY to .env for live mode.
 
-**1. Affordability Check (The 500 KES Demo)**
-
-```bash
-curl -X POST https://supreme-space-happiness-jj65xgxxg5pqcj57j-8000.app.github.dev/v1/loans/affordability-check \
-  -H "Content-Type: application/json" \
-  -d '{
-    "amount": 500,
-    "currency": "KES",
-    "purpose": "Working capital for Mobile Banking API operations - data and transport",
-    "gross_income": 24000,
-    "existing_debt": 4200,
-    "term_months": 1
-  }'
+## Demo
+https://YOUR-CODESPACE-3000.app.github.dev
