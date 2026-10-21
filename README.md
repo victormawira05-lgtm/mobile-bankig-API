@@ -26,4 +26,3 @@ npm run dev  # http://localhost:3000
 - Frontend: `https://verbose-space-couscous-97v9pxppx66vh9pp5-3000.app.github.dev/`
 - Backend: `https://verbose-space-couscous-97v9pxppx66vh9pp5-8000.app.github.dev/`
 
-> If dead: Open Codespace → PORTS → Public → Open in Browser
