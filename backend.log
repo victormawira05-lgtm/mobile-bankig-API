@@ -1,0 +1,21 @@
+nohup: ignoring input
+Starting PesaAI Backend - PayPal: LIVE, AI: LIVE
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://10.0.1.213:8000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 967-077-307
+127.0.0.1 - - [20/Oct/2026 22:21:23] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Oct/2026 22:21:58] "GET / HTTP/1.1" 404 -
+127.0.0.1 - - [20/Oct/2026 22:22:09] "OPTIONS /api/paypal/create-order HTTP/1.1" 200 -
+127.0.0.1 - - [20/Oct/2026 22:22:10] "POST /api/paypal/create-order HTTP/1.1" 200 -
+127.0.0.1 - - [20/Oct/2026 22:22:11] "POST /api/paypal/capture/MOCK-ORDER-27460522 HTTP/1.1" 200 -
+/usr/local/python/3.14.2/lib/python3.14/multiprocessing/resource_tracker.py:396: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-a28kkz30'}
+  warnings.warn(
+/usr/local/python/3.14.2/lib/python3.14/multiprocessing/resource_tracker.py:396: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-4qhatd3t'}
+  warnings.warn(

@@ -1,0 +1,11 @@
+nohup: ignoring input
+
+> mobile-banking-frontend@1.0.0 dev
+> vite --host 0.0.0.0
+
+
+  VITE v5.4.21  ready in 377 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://10.0.1.213:3000/
+Killed
