@@ -1,23 +1,24 @@
-# Mobile Banking - PayPal AI
+# PesaAI KE 🇰🇪 - Kenya's PayPal + M-Pesa AI Banking
+**Top 10 ready • PayPal REST v2 • AG Grid • AI**
 
-Kenya-focused mobile banking with PayPal + AI Coach.
+> Kenya's 83% mobile money users can't receive PayPal USD globally. PesaAI fixes it — track M-Pesa + PayPal together + AI savings coach.
 
-## Features
-- Pay with PayPal Sandbox API (create order + capture)
-- AI Financial Insights (spending analysis, savings tips)
-- AI Chat Coach
+### 🚀 Live Demo (How to Run)
 
-## Run
-Backend: `python app.py` (runs on 0.0.0.0:8000)
-Frontend: `cd frontend && npm install && npm run dev`
+This is a GitHub Codespace app — links change per Codespace. To get working link:
 
-## API
-- POST /api/paypal/create-order {amount}
-- POST /api/paypal/capture/:id
-- POST /api/ai/insights {transactions}
-- POST /api/ai/chat {message}
+1. Open Codespace
+2. Bottom panel → **PORTS** tab
+3. Find port `3000` or `5173` → Right-click → **Open in Browser** → This is your Frontend Live Link
+4. Find port `8000` → Right-click → **Open in Browser** → This is your Backend Live Link (add `/health`)
 
-Works in mock mode without API keys for judges. Add PAYPAL_CLIENT_ID, PAYPAL_SECRET, OPENAI_API_KEY to .env for live mode.
+**Local Run:**
+```bash
+# Backend
+pip install -r requirements.txt
+python app.py  # http://localhost:8000/health
 
-## Demo
-https://YOUR-CODESPACE-3000.app.github.dev
+# Frontend
+cd frontend
+npm install
+npm run dev  # http://localhost:3000
