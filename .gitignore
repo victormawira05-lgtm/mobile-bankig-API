@@ -1,4 +1,14 @@
-.venv/
+.env
+.env.local
+.env.development
+.env.production
+venv/
 __pycache__/
 .pytest_cache/
 *.pyc
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+build/
+.DS_Store
